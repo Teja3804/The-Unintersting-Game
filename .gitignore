@@ -1,0 +1,38 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+dist/
+*.egg-info/
+
+# Kite Connect Credentials (IMPORTANT: Never commit these!)
+kite_integration/kite_config.py
+kite_access_token.txt
+*.token
+*.key
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data files (optional - uncomment if you don't want to commit data)
+# *.csv
+# *.xlsx
+# data/
+
+# Logs
+*.log
+
