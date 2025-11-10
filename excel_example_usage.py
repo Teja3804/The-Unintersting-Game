@@ -92,9 +92,13 @@ def main():
                 for i, signal in enumerate(signals[:5], 1):  # Show first 5 signals
                     print(f"\n  Signal {i}:")
                     print(f"    Case: {signal.get('case', 'N/A')}")
+                    print(f"    Direction: {signal.get('direction', 'N/A')}")
                     print(f"    Date: {signal.get('date', 'N/A')}")
                     print(f"    Entry Price: ₹{signal.get('entry_price', 0):.2f}")
-                    print(f"    Stop Loss: ₹{signal.get('stop_loss', 0):.2f}")
+                    if signal.get('stop_loss'):
+                        print(f"    Stop Loss: ₹{signal.get('stop_loss', 0):.2f}")
+                    else:
+                        print(f"    Stop Loss: Not specified")
                     print(f"    Target: ₹{signal.get('target', 0):.2f}")
                     if 'market_direction' in signal:
                         print(f"    Market Direction: {signal['market_direction']}")
