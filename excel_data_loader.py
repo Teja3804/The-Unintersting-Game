@@ -96,7 +96,13 @@ class ExcelDataLoader:
         # Create a copy to avoid modifying original
         df = df.copy()
         
-        # Common column name mappings (case-insensitive)
+        # Store original column names for reference
+        original_columns = df.columns.tolist()
+        
+        # Normalize column names (lowercase, strip whitespace)
+        df.columns = [col.strip().lower() for col in df.columns]
+        
+        # Common column name mappings (case-insensitive, after lowercase normalization)
         column_mappings = {
             'date': 'Date',
             'datetime': 'Date',
@@ -113,11 +119,20 @@ class ExcelDataLoader:
             'price': 'Close',
             'volume': 'Volume',
             'vol': 'Volume',
-            'v': 'Volume'
+            'v': 'Volume',
+            # Additional mappings for common Excel formats (these will be ignored later)
+            'prev. close': 'PrevClose',
+            'prev close': 'PrevClose',
+            'ltp': 'LTP',
+            '52w h': '52WH',
+            '52w l': '52WL',
+            '52wh': '52WH',
+            '52wl': '52WL',
+            'value': 'Value',
+            'no of trades': 'NoOfTrades',
+            'no. of trades': 'NoOfTrades',
+            'series': 'Series'
         }
-        
-        # Normalize column names (lowercase, strip whitespace)
-        df.columns = [col.strip().lower() for col in df.columns]
         
         # Map columns
         for old_name, new_name in column_mappings.items():
@@ -145,9 +160,10 @@ class ExcelDataLoader:
         
         if missing_columns:
             raise ValueError(f"Missing required columns: {missing_columns}. "
-                           f"Found columns: {list(df.columns)}")
+                           f"Found columns: {list(df.columns)}. "
+                           f"Original columns were: {original_columns}")
         
-        # Select only required columns
+        # Select only required columns (ignore unused columns like PrevClose, LTP, 52WH, Value, NoOfTrades, Series, etc.)
         df = df[['Date', 'Open', 'High', 'Low', 'Close', 'Volume']].copy()
         
         # Remove rows with missing dates
