@@ -27,6 +27,67 @@ class TradeBacktester:
         self.quantity = quantity
         self.trades = []
     
+    def _calculate_default_stop_loss(self, entry_price: float, target: float, direction: str) -> float:
+        """
+        Calculate default stop loss when not provided.
+        SL = entry_price ± (0.65 * distance_to_target)
+        
+        Args:
+            entry_price: Entry price of the position
+            target: Target price
+            direction: 'LONG' or 'SHORT'
+            
+        Returns:
+            Calculated stop loss price
+        """
+        if target is None:
+            return None
+        
+        if direction == 'LONG':
+            # For LONG: target should be above entry, SL should be below entry
+            distance = target - entry_price
+            if distance <= 0:
+                # Invalid target (below or at entry), use 3% below entry as default
+                return entry_price * 0.97
+            sl = entry_price - (0.65 * distance)
+        else:  # SHORT
+            # For SHORT: target should be below entry, SL should be above entry
+            distance = entry_price - target
+            if distance <= 0:
+                # Invalid target (above or at entry), use 3% above entry as default
+                return entry_price * 1.03
+            sl = entry_price + (0.65 * distance)
+        
+        return sl
+    
+    def _validate_stop_loss(self, entry_price: float, stop_loss: float, direction: str) -> float:
+        """
+        Validate and fix stop loss to ensure it's on the correct side.
+        
+        Args:
+            entry_price: Entry price of the position
+            stop_loss: Stop loss price to validate
+            direction: 'LONG' or 'SHORT'
+            
+        Returns:
+            Validated (and potentially corrected) stop loss price
+        """
+        if stop_loss is None:
+            return None
+        
+        if direction == 'LONG':
+            # For LONG: SL must be BELOW entry price
+            if stop_loss >= entry_price:
+                # Invalid: SL above or at entry, fix it to 3% below entry
+                return entry_price * 0.97
+        else:  # SHORT
+            # For SHORT: SL must be ABOVE entry price
+            if stop_loss <= entry_price:
+                # Invalid: SL below or at entry, fix it to 3% above entry
+                return entry_price * 1.03
+        
+        return stop_loss
+    
     def simulate_trade(self, signal: Dict, ohlc_data: pd.DataFrame, 
                       max_days: int = 14, start_from_idx: int = None) -> Dict:
         """
@@ -47,6 +108,14 @@ class TradeBacktester:
         target = signal.get('target')
         direction = signal['direction']  # 'LONG' or 'SHORT'
         case = signal.get('case', 'Unknown')
+        
+        # Calculate default stop loss if not provided
+        if stop_loss is None and target is not None:
+            stop_loss = self._calculate_default_stop_loss(entry_price, target, direction)
+        
+        # Validate stop loss (ensure it's on correct side)
+        if stop_loss is not None:
+            stop_loss = self._validate_stop_loss(entry_price, stop_loss, direction)
         
         # Validate entry index
         if entry_index >= len(ohlc_data):
@@ -285,11 +354,24 @@ class TradeBacktester:
                     # Clear current position
                     current_position = None
                     current_position_entry_idx = None
-                else:
+                elif current_position is not None:
                     # Same direction - UPDATE stop loss and target, don't enter new position
                     # Keep the original entry price and date, but update SL and Target
-                    current_position['stop_loss'] = signal.get('stop_loss')
-                    current_position['target'] = signal.get('target')
+                    entry_price = current_position['entry_price']
+                    direction = current_position['direction']
+                    target = signal.get('target')
+                    stop_loss = signal.get('stop_loss')
+                    
+                    # Calculate default stop loss if not provided
+                    if stop_loss is None and target is not None:
+                        stop_loss = self._calculate_default_stop_loss(entry_price, target, direction)
+                    
+                    # Validate stop loss (ensure it's on correct side)
+                    if stop_loss is not None:
+                        stop_loss = self._validate_stop_loss(entry_price, stop_loss, direction)
+                    
+                    current_position['stop_loss'] = stop_loss
+                    current_position['target'] = target
                     current_position['case'] = signal.get('case', current_position['case'])
                     
                     # Check if position has exceeded max_days
@@ -376,12 +458,24 @@ class TradeBacktester:
             if signal.get('entry_price') is None:
                 continue  # Skip invalid signal
             
+            entry_price = signal['entry_price']
+            target = signal.get('target')
+            stop_loss = signal.get('stop_loss')
+            
+            # Calculate default stop loss if not provided
+            if stop_loss is None and target is not None:
+                stop_loss = self._calculate_default_stop_loss(entry_price, target, signal_direction)
+            
+            # Validate stop loss (ensure it's on correct side)
+            if stop_loss is not None:
+                stop_loss = self._validate_stop_loss(entry_price, stop_loss, signal_direction)
+            
             current_position = {
                 'direction': signal_direction,
-                'entry_price': signal['entry_price'],
+                'entry_price': entry_price,
                 'entry_date': signal['date'],
-                'stop_loss': signal.get('stop_loss'),
-                'target': signal.get('target'),
+                'stop_loss': stop_loss,
+                'target': target,
                 'case': signal.get('case', 'Unknown')
             }
             current_position_entry_idx = signal_index
@@ -397,25 +491,25 @@ class TradeBacktester:
             exit_reason = None
             exit_price = None
             
-            # Check SL and Target on entry day
+            # Check SL and Target on entry day (use calculated stop_loss)
             if signal_direction == 'LONG':
-                if signal.get('stop_loss') is not None and entry_low <= signal['stop_loss']:
+                if stop_loss is not None and entry_low <= stop_loss:
                     exit_hit = True
                     exit_reason = 'Stop Loss Hit'
-                    exit_price = signal['stop_loss']
-                elif signal.get('target') is not None and entry_high >= signal['target']:
+                    exit_price = stop_loss
+                elif target is not None and entry_high >= target:
                     exit_hit = True
                     exit_reason = 'Target Hit'
-                    exit_price = signal['target']
+                    exit_price = target
             else:  # SHORT
-                if signal.get('stop_loss') is not None and entry_high >= signal['stop_loss']:
+                if stop_loss is not None and entry_high >= stop_loss:
                     exit_hit = True
                     exit_reason = 'Stop Loss Hit'
-                    exit_price = signal['stop_loss']
-                elif signal.get('target') is not None and entry_low <= signal['target']:
+                    exit_price = stop_loss
+                elif target is not None and entry_low <= target:
                     exit_hit = True
                     exit_reason = 'Target Hit'
-                    exit_price = signal['target']
+                    exit_price = target
             
             # If exit hit on entry day, record trade and clear position
             if exit_hit:
