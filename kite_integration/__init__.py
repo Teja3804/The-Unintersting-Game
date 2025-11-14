@@ -1,2 +1,0 @@
-# Kite Connect integration package
-
